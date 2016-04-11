@@ -27,6 +27,7 @@ cd libvirt
 git checkout -b 1.3.2 v1.3.2
 sudo apt-get install libxml2-utils
 sudo apt-get install -y libxml2
-sudo apt-get install -y libnl-dev uuid-dev
+sudo apt-get install -y libnl-dev uuid-dev libxml2-dev
+
 ./autogen.sh
 
