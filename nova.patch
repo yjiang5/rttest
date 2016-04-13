@@ -1,0 +1,185 @@
+diff --git a/nova/pci/stats.py b/nova/pci/stats.py
+index 3185ca6..4357e9c 100644
+--- a/nova/pci/stats.py
++++ b/nova/pci/stats.py
+@@ -152,9 +152,6 @@ class PciDeviceStats(object):
+             # For now, keep the same algorithm as during scheduling:
+             # a spec may be able to match multiple pools.
+             pools = self._filter_pools_for_spec(self.pools, spec)
+-            if numa_cells:
+-                pools = self._filter_pools_for_numa_cells(pools, numa_cells)
+-            pools = self._filter_non_requested_pfs(request, pools)
+             # Failed to allocate the required number of devices
+             # Return the devices already allocated back to their pools
+             if sum([pool['count'] for pool in pools]) < count:
+@@ -246,13 +243,11 @@ class PciDeviceStats(object):
+         # NOTE(vladikr): This code maybe open to race conditions.
+         # Two concurrent requests may succeed when called support_requests
+         # because this method does not remove related devices from the pools
++	LOG.debug("request is %s", request)
++	LOG.debug("Poll is %s", pools)
+         count = request.count
+         matching_pools = self._filter_pools_for_spec(pools, request.spec)
+-        if numa_cells:
+-            matching_pools = self._filter_pools_for_numa_cells(matching_pools,
+-                                                          numa_cells)
+-        matching_pools = self._filter_non_requested_pfs(request,
+-                                                        matching_pools)
++	LOG.debug("Matching Poll is %s", matching_pools)
+         if sum([pool['count'] for pool in matching_pools]) < count:
+             return False
+         else:
+@@ -273,6 +268,7 @@ class PciDeviceStats(object):
+         """
+         # note (yjiang5): this function has high possibility to fail,
+         # so no exception should be triggered for performance reason.
++	LOG.debug("pci support request")
+         pools = copy.deepcopy(self.pools)
+         return all([self._apply_request(pools, r, numa_cells)
+                         for r in requests])
+diff --git a/nova/pci/utils.py b/nova/pci/utils.py
+index b11ce06..ddb1fe7 100644
+--- a/nova/pci/utils.py
++++ b/nova/pci/utils.py
+@@ -48,6 +48,7 @@ def pci_device_prop_match(pci_dev, specs):
+      {"vendor_id":"10de", "product_id":"10d8"}]
+ 
+     """
++    LOG.debug("pci_device prop match %s", pci_dev)
+     def _matching_devices(spec):
+         return all(pci_dev.get(k) == v for k, v in six.iteritems(spec))
+ 
+diff --git a/nova/scheduler/filters/numa_topology_filter.py b/nova/scheduler/filters/numa_topology_filter.py
+index 2417f43..2fedb7e 100644
+--- a/nova/scheduler/filters/numa_topology_filter.py
++++ b/nova/scheduler/filters/numa_topology_filter.py
+@@ -14,6 +14,7 @@ from oslo_log import log as logging
+ 
+ from nova import objects
+ from nova.objects import fields
++from oslo_serialization import jsonutils
+ from nova.scheduler import filters
+ from nova.virt import hardware
+ 
+@@ -63,9 +64,14 @@ class NUMATopologyFilter(filters.BaseHostFilter):
+         extra_specs = spec_obj.flavor.extra_specs
+         image_props = spec_obj.image.properties
+         requested_topology = spec_obj.numa_topology
++
+         host_topology, _fmt = hardware.host_topology_and_format_from_host(
+                 host_state)
+         pci_requests = spec_obj.pci_requests
++	LOG.debug("numa info iiis, %(request_topo)s on the %(host_topo)s with pci requet %(pcires)s",
++		{'request_topo': objects.base.obj_to_primitive(requested_topology),
++		 'host_topo': objects.base.obj_to_primitive(host_topology),
++		 "pcires": objects.base.obj_to_primitive(pci_requests)})
+ 
+         if pci_requests:
+             pci_requests = pci_requests.requests
+diff --git a/nova/virt/hardware.py b/nova/virt/hardware.py
+index 0ae1417..375ee23 100644
+--- a/nova/virt/hardware.py
++++ b/nova/virt/hardware.py
+@@ -26,6 +26,7 @@ import nova.conf
+ from nova import context
+ from nova import exception
+ from nova.i18n import _
++from nova.i18n import _LW
+ from nova import objects
+ from nova.objects import fields
+ from nova.objects import instance as obj_instance
+@@ -696,6 +697,8 @@ def _pack_instance_onto_cores(available_siblings,
+         for threads_no in range(1, len(sib) + 1):
+             sibling_sets[threads_no].append(sib)
+ 
++    LOG.debug("the available_siblings is %s", jsonutils.dumps(available_siblings))
++    LOG.debug("the sibling set is %s", jsonutils.dumps(sibling_sets))
+     pinning = None
+     threads_no = 1
+ 
+@@ -739,6 +742,7 @@ def _pack_instance_onto_cores(available_siblings,
+     def _get_pinning(threads_no, sibling_set, instance_cores):
+         """Generate a CPU-vCPU pin mapping."""
+         if threads_no * len(sibling_set) < len(instance_cores):
++	    LOG.warning(_LW("Fail 28"))
+             return
+ 
+         usable_cores = map(lambda s: list(s)[:threads_no], sibling_set)
+@@ -766,8 +770,10 @@ def _pack_instance_onto_cores(available_siblings,
+             fields.CPUThreadAllocationPolicy.ISOLATE):
+         # make sure we have at least one fully free core
+         if threads_per_core not in sibling_sets:
++	    LOG.warning(_LW("Fail 22"))
+             return
+ 
++	LOG.warning(_LW("Fail 25"))
+         pinning = _get_pinning(1,  # we only want to "use" one thread per core
+                                sibling_sets[threads_per_core],
+                                instance_cell.cpuset)
+@@ -775,6 +781,7 @@ def _pack_instance_onto_cores(available_siblings,
+         # NOTE(ndipanov): We iterate over the sibling sets in descending order
+         # of cores that can be packed. This is an attempt to evenly distribute
+         # instances among physical cores
++	LOG.warning(_LW("Fail 26"))
+         for threads_no, sibling_set in sorted(
+                 (t for t in sibling_sets.items()), reverse=True):
+ 
+@@ -795,6 +802,7 @@ def _pack_instance_onto_cores(available_siblings,
+         threads_no = _threads(instance_cell, threads_no)
+ 
+     if not pinning:
++	LOG.warning(_LW("Fail 23"))
+         return
+ 
+     topology = objects.VirtCPUTopology(sockets=1,
+@@ -821,6 +829,7 @@ def _numa_fit_instance_cell_with_pinning(host_cell, instance_cell):
+         host_cell.avail_memory < instance_cell.memory):
+         # If we do not have enough CPUs available or not enough memory
+         # on the host cell, we quit early (no oversubscription).
++	LOG.warning(_LW("Fail 21"))
+         return
+ 
+     if host_cell.siblings:
+@@ -831,8 +840,10 @@ def _numa_fit_instance_cell_with_pinning(host_cell, instance_cell):
+     else:
+         # Straightforward to pin to available cpus when there is no
+         # hyperthreading on the host
++	LOG.debug("free cpus %s", jsonutils.dumps(host_cell.free_cpus))
++        avail_cpus=[set([cpu]) for cpu in host_cell.free_cpus]
+         return _pack_instance_onto_cores(
+-            [host_cell.free_cpus], instance_cell, host_cell.id)
++            avail_cpus, instance_cell, host_cell.id)
+ 
+ 
+ def _numa_fit_instance_cell(host_cell, instance_cell, limit_cell=None):
+@@ -852,12 +863,14 @@ def _numa_fit_instance_cell(host_cell, instance_cell, limit_cell=None):
+     # itself on any NUMA cell
+     if (instance_cell.memory > host_cell.memory or
+             len(instance_cell.cpuset) > len(host_cell.cpuset)):
++	LOG.warning(_LW("Fail 1"))
+         return None
+ 
+     if instance_cell.cpu_pinning_requested:
+         new_instance_cell = _numa_fit_instance_cell_with_pinning(
+             host_cell, instance_cell)
+         if not new_instance_cell:
++            LOG.warning(_LW("Fail 2"))
+             return
+         new_instance_cell.pagesize = instance_cell.pagesize
+         instance_cell = new_instance_cell
+@@ -875,6 +888,7 @@ def _numa_fit_instance_cell(host_cell, instance_cell, limit_cell=None):
+         pagesize = _numa_cell_supports_pagesize_request(
+             host_cell, instance_cell)
+         if not pagesize:
++            LOG.warning(_LW("Fail 3"))
+             return
+ 
+     instance_cell.id = host_cell.id
+@@ -1241,6 +1255,7 @@ def numa_fit_instance_to_host(
+                 cells.append(got_cell)
+             if len(cells) == len(host_cell_perm):
+                 if not pci_requests:
++		    LOG.debug("We got the cell info")
+                     return objects.InstanceNUMATopology(cells=cells)
+                 elif ((pci_stats is not None) and
+                     pci_stats.support_requests(pci_requests,
