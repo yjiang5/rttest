@@ -1,20 +1,21 @@
 #!/bin/sh
 
 #preparation
-glance image-create --name="centos-7-1603"   --container-format=bare --disk-format=qcow2 < /tmp/CentOS-7-x86_64-GenericCloud-1603.qcow2c
+glance image-create --name="centos-7-1603"   --container-format=bare --disk-format=qcow2 < ~/tmp/CentOS-7-x86_64-GenericCloud-1603.qcow2
 
 nova keypair-add frt >~/tmp/frt.pem
 chmod 600 ~/tmp/frt.pem
-scp ~/tmp/frt.pem  stack@172.23.0.83:~/tmp/
+scp ~/tmp/frt.pem  stack@172.24.1.4:~/tmp/
+scp ~/tmp/frt.pem  stack@172.24.1.5:~/tmp/
 
 nova aggregate-create realtime
 nova aggregate-set-metadata realtime rt=true
 nova aggregate-create nonrealtime
 nova aggregate-set-metadata nonrealtime rt=false
-nova aggregate-add-host realtime  manjeet86150
+nova aggregate-add-host realtime intelci-node05
 
 
-nova flavor-create m1.realtime 10 2048 20 4
+nova flavor-create m1.realtime 10 8192 80 4
 nova flavor-key m1.realtime set hw:cpu_policy=dedicated
 nova flavor-key m1.realtime set hw:cpu_thread_policy=isolate
 nova flavor-key m1.realtime set hw:cpu_realtime_mask=^0
