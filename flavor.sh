@@ -22,6 +22,6 @@ nova flavor-key m1.realtime set hw:cpu_realtime_mask=^0
 nova flavor-key m1.realtime set hw:cpu_realtime=yes
 nova flavor-key m1.realtime set hw:mem_page_size=1GB
 nova flavor-key m1.realtime set aggregate_instance_extra_specs:rt=true
-
+#nova flavor-key m1.realtime set "pci_passthrough:alias"="PassNic:1"
 
 #nova boot --image centos-7-1603 --flavor m1.medium --nic net-id=7b1623d5-86f7-4256-a535-61ca9b61072a  --security-groups default --key-name frt frt
