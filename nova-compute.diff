@@ -1,0 +1,75 @@
+diff --git a/nova/compute/resource_tracker.py b/nova/compute/resource_tracker.py
+index 6ed5bf6..253a2ac 100644
+--- a/nova/compute/resource_tracker.py
++++ b/nova/compute/resource_tracker.py
+@@ -568,8 +568,9 @@ class ResourceTracker(object):
+ 
+         if ('pci_passthrough_devices' in resources and
+                 resources['pci_passthrough_devices']):
+-            LOG.debug("Hypervisor: assignable PCI devices: %s",
+-                      resources['pci_passthrough_devices'])
++           # LOG.debug("Hypervisor: assignable PCI devices: %s",
++           #           resources['pci_passthrough_devices'])
++	    LOG.debug("Has pci devices")
+ 
+         pci_devices = resources.get('pci_passthrough_devices')
+ 
+@@ -577,13 +578,12 @@ class ResourceTracker(object):
+                   "name=%(node)s "
+                   "free_ram=%(free_ram)sMB "
+                   "free_disk=%(free_disk)sGB "
+-                  "free_vcpus=%(free_vcpus)s "
+-                  "pci_devices=%(pci_devices)s",
++                  "free_vcpus=%(free_vcpus)s ",
++#                  "pci_devices=%(pci_devices)s",
+                   {'node': self.nodename,
+                    'free_ram': free_ram_mb,
+                    'free_disk': free_disk_gb,
+-                   'free_vcpus': free_vcpus,
+-                   'pci_devices': pci_devices})
++                   'free_vcpus': free_vcpus})
+ 
+     def _report_final_resource_view(self):
+         """Report final calculate of physical memory, used virtual memory,
+diff --git a/nova/pci/manager.py b/nova/pci/manager.py
+index 6d73c43..13b333f 100644
+--- a/nova/pci/manager.py
++++ b/nova/pci/manager.py
+@@ -114,7 +114,8 @@ class PciDevTracker(object):
+         devices = []
+         for dev in jsonutils.loads(devices_json):
+             if self.dev_filter.device_assignable(dev):
+-                devices.append(dev)
++		if (dev['address'] == '0000:88:00.0' or dev['address'] == '0000:88:00.1'):
++	        	devices.append(dev)
+         self._set_hvdevs(devices)
+ 
+     def _set_hvdevs(self, devices):
+diff --git a/nova/pci/stats.py b/nova/pci/stats.py
+index 3185ca6..fa6ec75 100644
+--- a/nova/pci/stats.py
++++ b/nova/pci/stats.py
+@@ -151,10 +151,7 @@ class PciDeviceStats(object):
+             spec = request.spec
+             # For now, keep the same algorithm as during scheduling:
+             # a spec may be able to match multiple pools.
+-            pools = self._filter_pools_for_spec(self.pools, spec)
+-            if numa_cells:
+-                pools = self._filter_pools_for_numa_cells(pools, numa_cells)
+-            pools = self._filter_non_requested_pfs(request, pools)
++	    pools = self._filter_pools_for_spec(self.pools, spec)
+             # Failed to allocate the required number of devices
+             # Return the devices already allocated back to their pools
+             if sum([pool['count'] for pool in pools]) < count:
+@@ -248,11 +245,6 @@ class PciDeviceStats(object):
+         # because this method does not remove related devices from the pools
+         count = request.count
+         matching_pools = self._filter_pools_for_spec(pools, request.spec)
+-        if numa_cells:
+-            matching_pools = self._filter_pools_for_numa_cells(matching_pools,
+-                                                          numa_cells)
+-        matching_pools = self._filter_non_requested_pfs(request,
+-                                                        matching_pools)
+         if sum([pool['count'] for pool in matching_pools]) < count:
+             return False
+         else:
