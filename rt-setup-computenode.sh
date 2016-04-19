@@ -12,3 +12,5 @@ echo "12" > /sys/devices/system/node/node0/hugepages/hugepages-1048576kB/nr_huge
 mkdir -p /mnt/hugetlbfs-1g
 sudo mount -t hugetlbfs hugetlbfs /mnt/hugetlbfs-1g
 
+#sudo /sbin/sysctl net.ipv4.conf.p1p1.forwarding=1
+#sudo iptables -t nat -A POSTROUTING -o p1p1 -j MASQUERADE
